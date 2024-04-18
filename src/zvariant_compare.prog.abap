@@ -4,12 +4,18 @@
 *&
 *&---------------------------------------------------------------------*
 REPORT zvariant_compare MESSAGE-ID zxmd_msg.
-DATA:alv_grid               TYPE REF TO cl_gui_alv_grid,
-     alv_grid_opt           TYPE REF TO cl_gui_alv_grid,
-     alv_container          TYPE REF TO cl_gui_docking_container,
-     alv_splitter_container TYPE REF TO cl_gui_splitter_container,
-     ref_container1         TYPE REF TO cl_gui_container,
-     ref_container2         TYPE REF TO cl_gui_container.
+DATA:alv_grid                TYPE REF TO cl_gui_alv_grid,
+     alv_grid_opt            TYPE REF TO cl_gui_alv_grid,
+     alv_container           TYPE REF TO cl_gui_docking_container,
+     alv_splitter_container  TYPE REF TO cl_gui_splitter_container,
+     ref_container_left      TYPE REF TO cl_gui_container,
+     ref_container_right     TYPE REF TO cl_gui_container,
+     ref_container_left_top  TYPE REF TO cl_gui_container, " 用于放置top-of-page  17.04.2024 18:51:48 by kkw
+     ref_container_right_top TYPE REF TO cl_gui_container,
+     gref_doc_left           TYPE REF TO cl_dd_document,
+     gref_viewer_left        TYPE REF TO cl_gui_html_viewer,
+     gref_doc_right          TYPE REF TO cl_dd_document,
+     gref_viewer_right       TYPE REF TO cl_gui_html_viewer.
 DATA: gt_fldct     TYPE lvc_t_fcat,
       gs_slayt     TYPE lvc_s_layo,
       gt_fldct_opt TYPE lvc_t_fcat,
@@ -35,10 +41,19 @@ DATA:dref           TYPE REF TO data,
 "alv展示用表
 FIELD-SYMBOLS:<tab_alv>     TYPE STANDARD TABLE,
               <tab_opt_alv> TYPE STANDARD TABLE.
+" 计算报表取数时长  17.04.2024 19:17:14 by kkw
+TYPES:BEGIN OF ty_secds,
+        lv_start TYPE i,
+        lv_end   TYPE i,
+        secds    TYPE p DECIMALS 1,
+      END OF ty_secds.
+DATA:wa_secds1 TYPE ty_secds,
+     wa_secds2 TYPE ty_secds.
+INCLUDE zvariant_compare_class.
 SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE btxt1.
-  PARAMETERS:p_rep    TYPE rsvar-report DEFAULT 'ZPPR014',
-             p_rep_op TYPE rsvar-report DEFAULT 'ZPPR014_OPT',
-             p_varian TYPE rsvar-variant DEFAULT '20240218测试'.
+  PARAMETERS:p_rep    TYPE rsvar-report MEMORY ID prep,
+             p_rep_op TYPE rsvar-report MEMORY ID prepop,
+             p_varian TYPE rsvar-variant MEMORY ID pvarian.
 
 SELECTION-SCREEN END OF BLOCK b1.
 
@@ -103,10 +118,9 @@ FORM getdata.
     EXIT.
   ENDIF.
 
-  DATA:ls_data       TYPE REF TO data,
-       ls_data_descr TYPE REF TO cl_abap_datadescr,
-       seltab        TYPE TABLE OF rsparams,
-       seltab_wa     LIKE LINE OF seltab.
+  DATA:ls_data   TYPE REF TO data,
+       seltab    TYPE TABLE OF rsparams,
+       seltab_wa LIKE LINE OF seltab.
   CLEAR:seltab,ls_data.
   LOOP AT gt_valutab ASSIGNING FIELD-SYMBOL(<gt_valutab>).
     CLEAR seltab_wa.
@@ -119,36 +133,61 @@ FORM getdata.
     APPEND seltab_wa TO seltab.
   ENDLOOP.
 
-  cl_salv_bs_runtime_info=>set( display = abap_false metadata = abap_false data  = abap_true ).
-  " 原程序  18.02.2024 17:36:59 by kkw
+*  原程序  18.02.2024 17:36:59 by kkw
+  cl_salv_bs_runtime_info=>set( display = abap_false metadata = abap_true data = abap_true ).
+  CLEAR:wa_secds1,ls_data.
+  GET RUN TIME FIELD wa_secds1-lv_start.
   SUBMIT (p_rep)
   WITH SELECTION-TABLE seltab
   AND RETURN
   .
+  GET RUN TIME FIELD wa_secds1-lv_end.
+  wa_secds1-secds = ( wa_secds1-lv_end - wa_secds1-lv_start ) / 1000000 .
+*  获取原程序报表数据
   TRY.
-      cl_salv_bs_runtime_info=>get_data_ref(
-      IMPORTING r_data = ls_data r_data_descr = ls_data_descr ).
+      cl_salv_bs_runtime_info=>get_data_ref( IMPORTING r_data = ls_data ).
     CATCH  cx_salv_bs_sc_runtime_info.
       EXIT.
   ENDTRY.
+*  获取原程序字段名及其描述
+  TRY .
+      DATA(metadata) = cl_salv_bs_runtime_info=>get_metadata( ).
+    CATCH cx_salv_bs_sc_runtime_info.
+  ENDTRY.
+  cl_salv_bs_runtime_info=>clear_all( ).
   ASSIGN ls_data->* TO <tab>.
-  " 优化后程序  18.02.2024 17:37:13 by kkw
+  IF <tab> IS NOT ASSIGNED.
+    EXIT.
+  ENDIF.
+
+*  优化后程序  18.02.2024 17:37:13 by kkw
+  cl_salv_bs_runtime_info=>set( display = abap_false metadata = abap_true data = abap_true ).
+  CLEAR:wa_secds2,ls_data.
+  GET RUN TIME FIELD wa_secds2-lv_start.
   SUBMIT (p_rep_op)
   WITH SELECTION-TABLE seltab
   AND RETURN
   .
+  GET RUN TIME FIELD wa_secds2-lv_end.
+  wa_secds2-secds = ( wa_secds2-lv_end - wa_secds2-lv_start ) / 1000000 .
+*  获取优化后程序报表数据
   TRY.
-      cl_salv_bs_runtime_info=>get_data_ref(
-      IMPORTING r_data = ls_data ).
+      cl_salv_bs_runtime_info=>get_data_ref( IMPORTING r_data = ls_data ).
     CATCH  cx_salv_bs_sc_runtime_info.
       EXIT.
   ENDTRY.
+*  获取优化后程序字段名及其描述
+  TRY .
+      DATA(metadata_opt) = cl_salv_bs_runtime_info=>get_metadata( ).
+    CATCH cx_salv_bs_sc_runtime_info.
+  ENDTRY.
+  cl_salv_bs_runtime_info=>clear_all( ).
   ASSIGN ls_data->* TO <tab_opt>.
   IF <tab_opt> IS NOT ASSIGNED.
     EXIT.
   ENDIF.
-  cl_salv_bs_runtime_info=>clear_all( ).
-  " 比对数据  18.02.2024 17:40:14 by kkw
+
+*  比对数据  18.02.2024 17:40:14 by kkw
   CHECK <tab> IS ASSIGNED AND <tab_opt> IS ASSIGNED.
 *  SORT <tab>.
 *  SORT <tab_opt>.
@@ -184,7 +223,7 @@ FORM getdata.
         cl_abap_tabledescr=>describe_by_data( <tab_opt> )
         )->get_table_line_type( )
         )->components.
-  "赋值优化后的表比优化前的表名字不一致的字段
+*  赋值优化后的表比优化前的表名字不一致的字段
   CLEAR:it_fieldname,it_fieldname[].
   LOOP AT compdescr_table_opt ASSIGNING FIELD-SYMBOL(<compdescr_table_opt>).
     CLEAR:it_fieldname.
@@ -195,7 +234,7 @@ FORM getdata.
     ENDIF.
   ENDLOOP.
 
-  "构建alv展示的内表和fieldcat
+*  构建alv展示的内表和fieldcat
   CLEAR:gt_fldct,component_tab,dref.
   UNASSIGN:<tab_alv>.
   PERFORM catset TABLES gt_fldct USING: 'KKWXH' '' '' '序号'.
@@ -208,17 +247,24 @@ FORM getdata.
       WHEN OTHERS.
         componentdescr-type ?= cl_abap_elemdescr=>get_by_kind( p_type_kind = <compdescr_table>-type_kind p_length = <compdescr_table>-length p_decimals = <compdescr_table>-decimals ).
     ENDCASE.
-    PERFORM catset TABLES gt_fldct USING: <compdescr_table>-name '' '' <compdescr_table>-name.
+*    追加fieldname描述
+    READ TABLE metadata-t_fcat ASSIGNING FIELD-SYMBOL(<t_fcat>) WITH KEY fieldname = <compdescr_table>-name.
+    IF sy-subrc EQ 0.
+      DATA(scrtext_l) = |{ <t_fcat>-scrtext_l }({ <compdescr_table>-name })|.
+      PERFORM catset TABLES gt_fldct USING: <compdescr_table>-name '' '' scrtext_l.
+    ELSE.
+      PERFORM catset TABLES gt_fldct USING: <compdescr_table>-name '' '' <compdescr_table>-name.
+    ENDIF.
     APPEND componentdescr TO component_tab.
   ENDLOOP.
-  " 插入alv颜色内表  20.02.2024 11:39:44 by kkw
+*  插入alv颜色内表  20.02.2024 11:39:44 by kkw
   gs_slayt-ctab_fname = 'KKWKKW'.
   CLEAR:componentdescr.
   componentdescr-name = 'KKWKKW'.
   struct_type ?= cl_abap_structdescr=>describe_by_name( p_name = 'LVC_S_SCOL' ).
   componentdescr-type ?= cl_abap_tabledescr=>get( p_line_type = struct_type  ).
   APPEND componentdescr TO component_tab.
-  " 插入序号列  20.02.2024 11:39:21 by kkw
+*  插入序号列  20.02.2024 11:39:21 by kkw
   CLEAR:componentdescr.
   componentdescr-name = 'KKWXH'.
   componentdescr-type ?= cl_abap_elemdescr=>get_i( ).
@@ -233,7 +279,7 @@ FORM getdata.
   IF dref IS BOUND.
     ASSIGN dref->* TO <tab_alv>.
   ENDIF.
-  "优化后的报表相关
+*  优化后的报表相关
   CLEAR:gt_fldct_opt,component_tab,dref.
   PERFORM catset TABLES gt_fldct_opt USING: 'KKWXH' '' '' '序号'.
   LOOP AT compdescr_table_opt ASSIGNING <compdescr_table>.
@@ -245,7 +291,14 @@ FORM getdata.
       WHEN OTHERS.
         componentdescr-type ?= cl_abap_elemdescr=>get_by_kind( p_type_kind = <compdescr_table>-type_kind p_length = <compdescr_table>-length p_decimals = <compdescr_table>-decimals ).
     ENDCASE.
-    PERFORM catset TABLES gt_fldct_opt USING: <compdescr_table>-name '' '' <compdescr_table>-name.
+*    追加fieldname描述
+    READ TABLE metadata_opt-t_fcat ASSIGNING FIELD-SYMBOL(<t_fcat_opt>) WITH KEY fieldname = <compdescr_table>-name.
+    IF sy-subrc EQ 0.
+      DATA(scrtext_l_opt) = |{ <t_fcat_opt>-scrtext_l }({ <compdescr_table>-name })|.
+      PERFORM catset TABLES gt_fldct_opt USING: <compdescr_table>-name '' '' scrtext_l_opt.
+    ELSE.
+      PERFORM catset TABLES gt_fldct_opt USING: <compdescr_table>-name '' '' <compdescr_table>-name.
+    ENDIF.
     APPEND componentdescr TO component_tab.
   ENDLOOP.
   gs_slayt_opt-ctab_fname = 'KKWKKW'.
@@ -255,7 +308,7 @@ FORM getdata.
   componentdescr-type ?= cl_abap_tabledescr=>get( p_line_type = struct_type  ).
   APPEND componentdescr TO component_tab.
 
-  " 插入序号列  20.02.2024 11:39:21 by kkw
+*  插入序号列  20.02.2024 11:39:21 by kkw
   CLEAR:componentdescr.
   componentdescr-name = 'KKWXH'.
   componentdescr-type ?= cl_abap_elemdescr=>get_i( ).
@@ -271,14 +324,14 @@ FORM getdata.
     ASSIGN dref->* TO <tab_opt_alv>.
   ENDIF.
 
-  "拿着原始报表数据去比对优化后的报表数据，比对数据仅针对内表的首层扁平结构
+*  拿着原始报表数据去比对优化后的报表数据，比对数据仅针对内表的首层扁平结构
   LOOP AT <tab> ASSIGNING FIELD-SYMBOL(<wa_tab>).
     DATA(tabix) = sy-tabix.
     cc = tabix.
     CONDENSE cc NO-GAPS.
     INSERT INITIAL LINE INTO TABLE <tab_alv> ASSIGNING FIELD-SYMBOL(<tab_alv_new_line>).
     INSERT INITIAL LINE INTO TABLE <tab_opt_alv> ASSIGNING FIELD-SYMBOL(<tab_opt_alv_new_line>).
-    " 赋值序号列  20.02.2024 11:42:25 by kkw
+*    赋值序号列  20.02.2024 11:42:25 by kkw
     ASSIGN COMPONENT 'KKWXH' OF STRUCTURE <tab_alv_new_line> TO FIELD-SYMBOL(<kkwxh>).
     IF <kkwxh> IS ASSIGNED.
       <kkwxh> = tabix.
@@ -287,9 +340,9 @@ FORM getdata.
     IF <kkwxh_opt> IS ASSIGNED.
       <kkwxh_opt> = tabix.
     ENDIF.
-    "取出对应行的优化后的报表的数据
+*    取出对应行的优化后的报表的数据
     READ TABLE <tab_opt> ASSIGNING FIELD-SYMBOL(<wa_tab_opt>) INDEX tabix.
-    " 赋值优化后的报表不一致字段的颜色  19.02.2024 20:48:57 by kkw
+*    赋值优化后的报表不一致字段的颜色  19.02.2024 20:48:57 by kkw
     LOOP AT it_fieldname.
       ASSIGN COMPONENT it_fieldname OF STRUCTURE <tab_opt_alv_new_line> TO FIELD-SYMBOL(<ff>).
       IF <ff> IS ASSIGNED.
@@ -304,7 +357,7 @@ FORM getdata.
         UNASSIGN <ff>.
       ENDIF.
     ENDLOOP.
-    " 开始比对数据并将数据赋值到alv展示的内表  19.02.2024 13:03:34 by kkw
+*    开始比对数据并将数据赋值到alv展示的内表  19.02.2024 13:03:34 by kkw
     LOOP AT compdescr_table ASSIGNING <compdescr_table>.
       UNASSIGN:<fs>,<fs_opt>,<fs_alv>,<fs_opt_alv>.
       ASSIGN COMPONENT <compdescr_table>-name OF STRUCTURE <wa_tab> TO <fs>.
@@ -313,15 +366,15 @@ FORM getdata.
       ASSIGN COMPONENT <compdescr_table>-name OF STRUCTURE <tab_opt_alv_new_line> TO <fs_opt_alv>.
       IF <compdescr_table>-type_kind = 'h' AND  <compdescr_table>-name NE 'KKWKKW'.
         ASSIGN COMPONENT <compdescr_table>-name OF STRUCTURE <wa_tab> TO <fs_table>.
-        "填充新内表
+*        填充新内表
         <fs_alv> = |{ icon_list }{ <compdescr_table>-name }[ { lines( <fs_table> ) } ]|.
         CONTINUE.
       ELSEIF <compdescr_table>-type_kind = 'v' OR <compdescr_table>-type_kind = 'u'.
-        "填充新内表
+*        填充新内表
         <fs_alv> = |{ icon_structure }{ <compdescr_table>-name }|.
         CONTINUE.
       ENDIF.
-      "比对数据填充新内表
+*      比对数据填充新内表
       IF <fs> IS ASSIGNED AND <fs_opt> IS ASSIGNED.
         <fs_alv> = <fs>.
         <fs_opt_alv> = <fs_opt>.
@@ -370,7 +423,9 @@ USING pv_field pv_reftab pv_reffld pv_text.
 
   ls_fldcat-fieldname =  pv_field.    "字段名
   ls_fldcat-scrtext_l =  pv_text.     "长描述
-  ls_fldcat-coltext   =  pv_text.     "列描述
+  ls_fldcat-scrtext_m =  ls_fldcat-scrtext_l.     "长描述
+  ls_fldcat-scrtext_s =  ls_fldcat-scrtext_l.     "长描述
+  ls_fldcat-coltext   =  ls_fldcat-scrtext_l.     "列描述
   ls_fldcat-ref_table =  pv_reftab.   "参考表名
   ls_fldcat-ref_field =  pv_reffld.   "参考字段名
   ls_fldcat-col_opt   = 'A'.          "自动优化列宽

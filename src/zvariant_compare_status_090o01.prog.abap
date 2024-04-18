@@ -18,12 +18,14 @@ ENDMODULE.
 MODULE showalv OUTPUT.
   IF alv_container IS INITIAL.
     alv_container = NEW #( repid = sy-repid dynnr = sy-dynnr side = cl_gui_docking_container=>dock_at_top extension = 500 ).
-    alv_splitter_container = NEW #( parent = alv_container rows = 1 columns = 2 ).
-*    alv_splitter_container->set_row_height( id = 1 height = 25 ).
-    ref_container1 = alv_splitter_container->get_container( row = 1 column = 1 ).
-    alv_grid = NEW #( i_parent = ref_container1 ).
-    ref_container2 = alv_splitter_container->get_container( row = 1 column = 2 ).
-    alv_grid_opt = NEW #( i_parent = ref_container2 ).
+    alv_splitter_container = NEW #( parent = alv_container rows = 2 columns = 2 ).
+    alv_splitter_container->set_row_height( id = 1 height = 10 ).
+     ref_container_left_top = alv_splitter_container->get_container( row = 1 column = 1 ).
+     ref_container_left = alv_splitter_container->get_container( row = 2 column = 1 ).
+    alv_grid = NEW #( i_parent =  ref_container_left ).
+     ref_container_right_top = alv_splitter_container->get_container( row = 1 column = 2 ).
+     ref_container_right = alv_splitter_container->get_container( row = 2 column = 2 ).
+    alv_grid_opt = NEW #( i_parent =  ref_container_right ).
 
     PERFORM:callalv,callalv_opt.
     IF ret2[] IS NOT INITIAL.
@@ -47,6 +49,16 @@ ENDMODULE.
 *&---------------------------------------------------------------------*
 FORM callalv .
   CHECK <tab_alv> IS ASSIGNED.
+  CREATE OBJECT event_handler.
+  SET HANDLER event_handler->handle_top_of_page_left
+            FOR alv_grid.
+  CREATE OBJECT gref_doc_left.
+  CALL METHOD gref_doc_left->initialize_document.
+
+  CALL METHOD alv_grid->list_processing_events
+    EXPORTING
+      i_event_name = 'TOP_OF_PAGE'
+      i_dyndoc_id  = gref_doc_left.
   PERFORM callalv_oo
   TABLES <tab_alv> USING alv_grid gt_fldct 'P1' gs_slayt.
 ENDFORM.
@@ -60,6 +72,16 @@ ENDFORM.
 *&---------------------------------------------------------------------*
 FORM callalv_opt .
   CHECK <tab_opt_alv> IS ASSIGNED.
+  CREATE OBJECT event_handler.
+  SET HANDLER event_handler->handle_top_of_page_right
+            FOR alv_grid_opt.
+  CREATE OBJECT gref_doc_right.
+  CALL METHOD gref_doc_right->initialize_document.
+
+  CALL METHOD alv_grid_opt->list_processing_events
+    EXPORTING
+      i_event_name = 'TOP_OF_PAGE'
+      i_dyndoc_id  = gref_doc_right.
   PERFORM callalv_oo
   TABLES <tab_opt_alv> USING alv_grid_opt gt_fldct_opt 'P2' gs_slayt_opt.
 ENDFORM.
