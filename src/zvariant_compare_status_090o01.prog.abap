@@ -20,11 +20,11 @@ MODULE showalv OUTPUT.
     alv_container = NEW #( repid = sy-repid dynnr = sy-dynnr side = cl_gui_docking_container=>dock_at_top extension = 500 ).
     alv_splitter_container = NEW #( parent = alv_container rows = 2 columns = 2 ).
     alv_splitter_container->set_row_height( id = 1 height = 10 ).
-     ref_container_left_top = alv_splitter_container->get_container( row = 1 column = 1 ).
-     ref_container_left = alv_splitter_container->get_container( row = 2 column = 1 ).
+    ref_container_left_top = alv_splitter_container->get_container( row = 1 column = 1 ).
+    ref_container_left = alv_splitter_container->get_container( row = 2 column = 1 ).
     alv_grid = NEW #( i_parent =  ref_container_left ).
-     ref_container_right_top = alv_splitter_container->get_container( row = 1 column = 2 ).
-     ref_container_right = alv_splitter_container->get_container( row = 2 column = 2 ).
+    ref_container_right_top = alv_splitter_container->get_container( row = 1 column = 2 ).
+    ref_container_right = alv_splitter_container->get_container( row = 2 column = 2 ).
     alv_grid_opt = NEW #( i_parent =  ref_container_right ).
 
     PERFORM:callalv,callalv_opt.
@@ -166,6 +166,11 @@ USING p_alvgrid TYPE REF TO cl_gui_alv_grid
   it_filter,wa_filter.
 *LAYOUT
   p_layoutc-zebra      = 'X'.
+  LOOP AT p_fieldcat ASSIGNING FIELD-SYMBOL(<p_fieldcat>) WHERE fieldname = 'SEL'.
+    <p_fieldcat>-no_out = 'X'.
+    p_layoutc-box_fname = <p_fieldcat>-fieldname.
+    p_layoutc-sel_mode = 'D'.
+  ENDLOOP.
 *布局
   variantc-report = sy-repid.
   variantc-handle = p_handle.
@@ -179,7 +184,7 @@ USING p_alvgrid TYPE REF TO cl_gui_alv_grid
   APPEND cl_gui_alv_grid=>mc_fc_loc_paste_new_row TO it_ef1c.
   APPEND cl_gui_alv_grid=>mc_fc_loc_copy          TO it_ef1c.
   APPEND cl_gui_alv_grid=>mc_fc_loc_undo          TO it_ef1c.
-  APPEND cl_gui_alv_grid=>mc_fc_refresh          TO it_ef1c.
+  APPEND cl_gui_alv_grid=>mc_fc_refresh           TO it_ef1c.
 
 *ALV展示
   CALL METHOD p_alvgrid->set_table_for_first_display
