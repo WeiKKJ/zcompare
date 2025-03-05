@@ -66,6 +66,9 @@ AT SELECTION-SCREEN. "PAI
       PERFORM auth_check.
   ENDCASE.
 
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_varian.
+  PERFORM zf4_varian.
+
 INITIALIZATION.
 
 START-OF-SELECTION.
@@ -144,6 +147,7 @@ FORM getdata.
   GET RUN TIME FIELD wa_secds1-lv_end.
   wa_secds1-secds = ( wa_secds1-lv_end - wa_secds1-lv_start ) / 1000000 .
 *  获取原程序报表数据
+  CLEAR ls_data.
   TRY.
       cl_salv_bs_runtime_info=>get_data_ref( IMPORTING r_data = ls_data ).
     CATCH  cx_salv_bs_sc_runtime_info.
@@ -346,6 +350,11 @@ FORM getdata.
     LOOP AT it_fieldname.
       ASSIGN COMPONENT it_fieldname OF STRUCTURE <tab_opt_alv_new_line> TO FIELD-SYMBOL(<ff>).
       IF <ff> IS ASSIGNED.
+        " 填充新值  05.03.2025 11:56:16 by kkw
+*        UNASSIGN:<fs_opt>,<fs_opt_alv>.
+*        ASSIGN COMPONENT <compdescr_table>-name OF STRUCTURE <wa_tab_opt> TO <fs_opt>.
+*        ASSIGN COMPONENT <compdescr_table>-name OF STRUCTURE <tab_opt_alv_new_line> TO <fs_opt_alv>.
+
         ASSIGN COMPONENT 'KKWKKW' OF STRUCTURE <tab_opt_alv_new_line> TO <lvc_t_scol>.
         IF <lvc_t_scol> IS ASSIGNED.
           INSERT INITIAL LINE INTO TABLE <lvc_t_scol> ASSIGNING FIELD-SYMBOL(<lvc_t_scol_line>).
@@ -457,3 +466,73 @@ ENDFORM.
 INCLUDE zvariant_compare_status_090o01.
 
 INCLUDE zvariant_compare_user_commai01.
+*&---------------------------------------------------------------------*
+*& Form zf4_varian
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM zf4_varian .
+  DATA: lt_dynpread TYPE STANDARD TABLE OF dynpread WITH HEADER LINE.
+  DATA: lw_dynpread TYPE dynpread .
+  lw_dynpread-fieldname = 'P_REP'.
+  APPEND lw_dynpread TO lt_dynpread .
+  CALL FUNCTION 'DYNP_VALUES_READ'
+    EXPORTING
+      dyname               = sy-repid
+      dynumb               = sy-dynnr
+    TABLES
+      dynpfields           = lt_dynpread
+    EXCEPTIONS
+      invalid_abapworkarea = 1
+      invalid_dynprofield  = 2
+      invalid_dynproname   = 3
+      invalid_dynpronummer = 4
+      invalid_request      = 5
+      no_fielddescription  = 6
+      invalid_parameter    = 7
+      undefind_error       = 8
+      double_conversion    = 9
+      stepl_not_found      = 10
+      OTHERS               = 11.
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+    WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+  READ TABLE lt_dynpread INTO lw_dynpread INDEX 1.
+  DATA(rep) = lw_dynpread-fieldvalue.
+
+  DATA: return_tab TYPE ddshretval OCCURS 0 .
+  REFRESH return_tab[].
+  SELECT variant,ename,edat,etime
+    FROM varid
+    WHERE report = @rep
+    INTO TABLE @DATA(lt_varid)
+    .
+  CALL FUNCTION 'F4IF_INT_TABLE_VALUE_REQUEST'
+    EXPORTING
+      retfield         = 'VARIANT'
+      dynpprog         = sy-repid
+      dynpnr           = sy-dynnr
+      dynprofield      = 'P_REP'
+      window_title     = CONV char20( |程序{ rep }的变式目录：| )
+      value_org        = 'S' "Structure
+      callback_program = sy-repid
+*     callback_form    = 'CB_FORM'
+    TABLES
+      value_tab        = lt_varid
+*     field_tab        = l_dfies[]
+      return_tab       = return_tab[]
+*     dynpfld_mapping  = l_dselc[]
+    EXCEPTIONS
+      parameter_error  = 1
+      no_values_found  = 2
+      OTHERS           = 3.
+  IF sy-subrc <> 0.
+* MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+*         WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+  ELSE.
+  ENDIF.
+ENDFORM.
